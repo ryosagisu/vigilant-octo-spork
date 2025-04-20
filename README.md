@@ -51,6 +51,8 @@ This project sets up an Apache Airflow environment with Google Cloud integration
    AIRFLOW_PROJ_DIR=.
    _AIRFLOW_WWW_USER_USERNAME=airflow
    _AIRFLOW_WWW_USER_PASSWORD=airflow
+   PROJECT_ID=your-project-id
+   BUCKET_NAME=your-bucket-name
    ```
 
 5. **Build and Start Services**
