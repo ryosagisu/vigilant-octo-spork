@@ -1,4 +1,4 @@
--- total number of trips per day
+-- average trip duration per day
 SELECT
   datadate,
   AVG(duration_minutes) AS avg_duration_minutes

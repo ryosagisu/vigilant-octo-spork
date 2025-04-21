@@ -57,8 +57,8 @@ This project sets up an Apache Airflow environment with Google Cloud integration
 
 5. **Build and Start Services**
    ```bash
-   # Initialize the database
-   docker-compose up airflow-init
+   # Build Docker image
+   docker-compose build
 
    # Start all services
    docker-compose up -d
