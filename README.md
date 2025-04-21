@@ -29,8 +29,8 @@ This project sets up an Apache Airflow environment with Google Cloud integration
 
 1. **Clone the Repository**
    ```bash
-   git clone <repository-url>
-   cd <repository-name>
+   git clone git@github.com:ryosagisu/vigilant-octo-spork.git
+   cd vigilant-octo-spork
    ```
 
 2. **Set Up Google Cloud Credentials**

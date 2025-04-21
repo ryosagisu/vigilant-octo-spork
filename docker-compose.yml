@@ -67,6 +67,7 @@ x-airflow-common:
     GOOGLE_APPLICATION_CREDENTIALS: '/opt/airflow/config/service_account.json'
     BUCKET_NAME: ${BUCKET_NAME}
     PROJECT_ID: ${PROJECT_ID}
+    AIRFLOW_CONN_GOOGLE_CLOUD_DEFAULT: ${AIRFLOW_CONN_GOOGLE_CLOUD_DEFAULT}
     # WARNING: Use _PIP_ADDITIONAL_REQUIREMENTS option ONLY for a quick checks
     # for other purpose (development, test and especially production usage) build/extend Airflow image.
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
