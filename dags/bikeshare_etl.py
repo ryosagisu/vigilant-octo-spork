@@ -28,10 +28,7 @@ BUCKET_NAME = os.getenv('BUCKET_NAME')  # Get from environment
 PROJECT_ID = os.getenv('PROJECT_ID')    # Get from environment
 MAX_WORKERS = 50  # Maximum number of concurrent uploads
 
-def get_target_date(ds, **kwargs) -> datetime:
-    params: ParamsDict = kwargs.get("params", {})
-    target_date_str = params.get("target_date")
-
+def get_target_date(ds, target_date_str) -> datetime:
     if target_date_str and target_date_str != DEFAULT_TARGET_DATE:
         try:
             # Try parsing the user-supplied target_date param
@@ -58,8 +55,11 @@ def upload_partition(bucket_name: str, date: str, hour: int, group_df: pd.DataFr
     Returns:
         str: GCS path where the file was uploaded
     """
+    # Drop partition columns before saving
+    df_to_save = group_df.drop(columns=['datadate', 'datahour'])
+    
     # Convert DataFrame to PyArrow Table
-    table = pa.Table.from_pandas(group_df, preserve_index=False)
+    table = pa.Table.from_pandas(df_to_save, preserve_index=False)
     
     # Create Parquet file in memory
     parquet_buffer = pa.BufferOutputStream()
@@ -87,7 +87,9 @@ def extract_and_save_data(ds, **kwargs):
 
     logging.info(f"PROJECT_ID = {PROJECT_ID}, BUCKET_NAME = {BUCKET_NAME}")
 
-    target_date = get_target_date(ds, **kwargs)
+    params: ParamsDict = kwargs.get("params", {})
+    target_date_str = params.get("target_date")
+    target_date = get_target_date(ds, target_date_str)
     formatted_date = target_date.strftime('%Y-%m-%d')
     logging.info(f"Executing query for date: {formatted_date}")
 
@@ -108,13 +110,14 @@ def extract_and_save_data(ds, **kwargs):
         end_station_id,
         end_station_name,
         duration_minutes
-    FROM bigquery-public-data.austin_bikeshare.bikeshare_trips
-    """
+    FROM bigquery-public-data.austin_bikeshare.bikeshare_trips"""
 
-    if not kwargs.get('is_full_scan', True):
+    if not params.get('is_full_scan'):
         query = query + f"""
         WHERE DATE(start_time) = DATE('{formatted_date}')
         """
+
+    logging.info(f"Query: {query}")
 
     # Execute query and get results as DataFrame
     df = bq_hook.get_pandas_df(query)
