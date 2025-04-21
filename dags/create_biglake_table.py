@@ -18,16 +18,16 @@ def generate_external_table_query():
     return {
         'query': {
             'query': f"""
-            CREATE OR REPLACE EXTERNAL TABLE `{PROJECT_ID}.Spectacle.bikeshare_trips_external`
+            CREATE OR REPLACE EXTERNAL TABLE `{PROJECT_ID}.spectacle.bikeshare_trips_external`
             WITH PARTITION COLUMNS (
                 datadate DATE,
                 datahour INT64
             )
             WITH CONNECTION `{PROJECT_ID}.us.biglake-connection`
             OPTIONS (
-                uris = ['gs://{BUCKET_NAME}/bikeshare/*'],
+                uris = ['gs://{BUCKET_NAME}/bikeshare_trips/*'],
                 format = 'PARQUET',
-                hive_partition_uri_prefix = 'gs://{BUCKET_NAME}/bikeshare/',
+                hive_partition_uri_prefix = 'gs://{BUCKET_NAME}/bikeshare_trips/',
                 require_hive_partition_filter = false,
                 max_staleness = INTERVAL 1 DAY,
                 metadata_cache_mode = 'AUTOMATIC'

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import os
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from airflow import DAG
 from airflow.models.param import Param
@@ -25,6 +26,7 @@ default_args = {
 DEFAULT_TARGET_DATE = '-1'
 BUCKET_NAME = os.getenv('BUCKET_NAME')  # Get from environment
 PROJECT_ID = os.getenv('PROJECT_ID')    # Get from environment
+MAX_WORKERS = 50  # Maximum number of concurrent uploads
 
 def get_target_date(ds, **kwargs) -> datetime:
     params: ParamsDict = kwargs.get("params", {})
@@ -41,6 +43,38 @@ def get_target_date(ds, **kwargs) -> datetime:
     # Fallback logic if param is not provided or invalid
     execution_date = datetime.strptime(ds, "%Y-%m-%d")
     return execution_date - timedelta(days=1)
+
+def upload_partition(bucket_name: str, date: str, hour: int, group_df: pd.DataFrame, gcs_hook: GCSHook) -> str:
+    """
+    Upload a single partition to GCS.
+    
+    Args:
+        bucket_name: GCS bucket name
+        date: Partition date
+        hour: Hour of the day
+        group_df: DataFrame for this partition
+        gcs_hook: GCS Hook instance
+    
+    Returns:
+        str: GCS path where the file was uploaded
+    """
+    # Convert DataFrame to PyArrow Table
+    table = pa.Table.from_pandas(group_df, preserve_index=False)
+    
+    # Create Parquet file in memory
+    parquet_buffer = pa.BufferOutputStream()
+    pq.write_table(table, parquet_buffer)
+    
+    # Upload to GCS
+    gcs_path = f"bikeshare_trips/datadate={date}/datahour={hour:02d}/data.parquet"
+    gcs_hook.upload(
+        bucket_name=bucket_name,
+        object_name=gcs_path,
+        data=parquet_buffer.getvalue().to_pybytes(),
+        mime_type='application/octet-stream'
+    )
+    
+    return gcs_path
 
 def extract_and_save_data(ds, **kwargs):
     """
@@ -95,26 +129,37 @@ def extract_and_save_data(ds, **kwargs):
     # Add date and hour columns for grouping
     df['datadate'] = df['start_time'].dt.date
     df['datahour'] = df['start_time'].dt.hour
-
-    # Group data by date and hour and save to separate Parquet files
+    
+    # Prepare upload tasks
+    upload_tasks = []
     for (date, hour), group_df in df.groupby(['datadate', 'datahour']):
-        # Convert DataFrame to PyArrow Table
-        table = pa.Table.from_pandas(group_df, preserve_index=False)
-
-        # Create Parquet file in memory
-        parquet_buffer = pa.BufferOutputStream()
-        pq.write_table(table, parquet_buffer)
-
-        # Upload to GCS
-        gcs_path = f"bikeshare_trips/datadate={date}/datahour={hour:02d}/data.parquet"
-        gcs_hook.upload(
-            bucket_name=BUCKET_NAME,
-            object_name=gcs_path,
-            data=parquet_buffer.getvalue().to_pybytes(),
-            mime_type='application/octet-stream'
-        )
-
-        logging.info(f"Saved partition: gs://{BUCKET_NAME}/{gcs_path}")
+        upload_tasks.append((date, hour, group_df))
+    
+    logging.info(f"Preparing to upload {len(upload_tasks)} partitions")
+    
+    # Upload files in parallel
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        future_to_path = {
+            executor.submit(
+                upload_partition, 
+                BUCKET_NAME, 
+                date, 
+                hour, 
+                group_df,
+                gcs_hook
+            ): (date, hour)
+            for date, hour, group_df in upload_tasks
+        }
+        
+        # Process completed uploads
+        for future in as_completed(future_to_path):
+            date, hour = future_to_path[future]
+            try:
+                gcs_path = future.result()
+                logging.info(f"Successfully uploaded: gs://{BUCKET_NAME}/{gcs_path}")
+            except Exception as e:
+                logging.error(f"Error uploading partition for date={date}, hour={hour}: {str(e)}")
+                raise
 
 # Create the DAG
 dag = DAG(
